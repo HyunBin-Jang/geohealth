@@ -34,10 +34,10 @@ const Home = () => {
   ];
 
   const stats = [
-    { label: '분석 가능 지역', value: '229개', description: '전국 시군구' },
-    { label: 'GWR 계수', value: '1,374개', description: '지역별 변수 계수' },
-    { label: '물리적 요인', value: '6개', description: '건강 영향 변수' },
-    { label: '예측 정확도', value: '87%', description: '평균 R² 값' }
+    { label: '분석 가능 지역', value: '209개', description: '전국 시군구' },
+    { label: 'GWR 계수', value: '6개', description: '지역별 변수 계수' },
+    { label: '물리적 요인', value: '5개', description: '건강 영향 변수' },
+    { label: '예측 정확도', value: '52%', description: '평균 R² 값' }
   ];
 
   return (
