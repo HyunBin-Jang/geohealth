@@ -6,11 +6,12 @@
 
 ✅ 궁극적으로 **지역별 특성을 반영한 예측 모델**을 웹 서비스 형태로 구현하여, 정책 입안자에게 **데이터 기반의 정책 의사결정 근거**를 제공하고, 일반 대중에게는 **건강과 환경의 상호작용**에 대한 인식을 제고하는 참여형 플랫폼을 구축
 
-<img width="700" height="600" alt="Image" src="https://github.com/user-attachments/assets/54d671ed-7160-4df7-9304-37847b724cc2" />
-<img width="700" height="600" alt="Image" src="https://github.com/user-attachments/assets/21480379-0cf6-4363-b879-0f412dbcd2b1" />
-<img width="700" height="600" alt="Image" src="https://github.com/user-attachments/assets/8c52c991-77cc-4702-80d2-31d8ce5ff556" />
-<img width="700" height="600" alt="Image" src="https://github.com/user-attachments/assets/2bbafc0a-fe1e-4fee-a5a8-5936ffffc17d" />
-<img width="700" height="600" alt="Image" src="https://github.com/user-attachments/assets/2dd261e8-d919-481c-afed-627c5bf37367" />
+<img width="600" height="600" alt="Image" src="https://github.com/user-attachments/assets/54d671ed-7160-4df7-9304-37847b724cc2" />
+<img width="600" height="600" alt="Image" src="https://github.com/user-attachments/assets/8c52c991-77cc-4702-80d2-31d8ce5ff556" />
+<img width="600" height="600" alt="Image" src="https://github.com/user-attachments/assets/2dd261e8-d919-481c-afed-627c5bf37367" />
+<img width="600" height="600" alt="Image" src="https://github.com/user-attachments/assets/21480379-0cf6-4363-b879-0f412dbcd2b1" />
+<img width="600" height="600" alt="Image" src="https://github.com/user-attachments/assets/2bbafc0a-fe1e-4fee-a5a8-5936ffffc17d" />
+
 
 # 📝 프로젝트 개요
 
