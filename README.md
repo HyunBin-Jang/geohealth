@@ -117,9 +117,7 @@
 | `agree_count` | `agreeCount` | `BIGINT` | Default 0 | 찬성 투표 수 |
 | `disagree_count` | `disagreeCount` | `BIGINT` | Default 0 | 반대 투표 수 |
 
-## UI / UX 설계
 
-[geohealth-demo.s3-website.ap-northeast-2.amazonaws.com](http://geohealth-demo.s3-website.ap-northeast-2.amazonaws.com/)
 
 ## API 설계
 
