@@ -1,266 +1,275 @@
 import { useState, useEffect } from 'react';
+import { MapContainer, TileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css'; // Leaflet CSS 스타일 임포트
 import Layout from '../../components/layout/Layout';
-import { physicalFactors, dependentVariables, gwrCoefficients, regionData } from '../../mocks/gwrData';
+// 💡 regionData는 정적 데이터로 사용, gwrCoefficients는 제거(API 대체)
+import { regionData, physicalFactors, dependentVariables } from '../../mocks/gwrData.ts';
+
+// API 기본 URL
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+// 지도 중심 좌표 변경을 위한 컴포넌트
+const ChangeView = ({ center, zoom }: { center: [number, number], zoom: number }) => {
+  const map = useMap();
+  map.setView(center, zoom);
+  return null;
+};
 
 const RegionMap = () => {
   const [selectedVariable, setSelectedVariable] = useState('주점업 수');
   const [selectedDependent, setSelectedDependent] = useState('obesity');
   const [mapData, setMapData] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
+  // 💡 [수정] API 호출을 통해 계수 데이터 로드
   useEffect(() => {
-    // 선택된 변수에 따른 지도 데이터 업데이트
-    const data = regionData.map(region => {
-      const coefficient = gwrCoefficients.find(
-        c => c.regionCode === region.regionCode && 
-             c.variable === selectedVariable && 
-             c.dependentVar === selectedDependent
-      );
-      
-      return {
-        ...region,
-        coefficient: coefficient?.coefficient || 0,
-        pValue: coefficient?.pValue || 1,
-        localR2: coefficient?.localR2 || 0
-      };
-    });
-    
-    setMapData(data);
-  }, [selectedVariable, selectedDependent]);
+    const fetchCoefficients = async () => {
+      setIsLoading(true);
+      try {
+        // 쿼리 파라미터 구성
+        const params = new URLSearchParams({
+          variable: selectedVariable,
+          dependentVar: selectedDependent
+        });
 
-  const getColorIntensity = (coefficient: number) => {
-    const absCoeff = Math.abs(coefficient);
-    if (absCoeff >= 0.04) return coefficient > 0 ? 'bg-red-600' : 'bg-blue-600';
-    if (absCoeff >= 0.03) return coefficient > 0 ? 'bg-red-500' : 'bg-blue-500';
-    if (absCoeff >= 0.02) return coefficient > 0 ? 'bg-red-400' : 'bg-blue-400';
-    if (absCoeff >= 0.01) return coefficient > 0 ? 'bg-red-300' : 'bg-blue-300';
-    return 'bg-gray-200';
+        // API 호출: 전체 지역의 해당 변수 계수 조회
+        // (백엔드에 /api/gwr/coefficients/all 엔드포인트가 구현되어 있어야 함)
+        const response = await fetch(`${API_BASE_URL}/api/gwr/coefficients/all?${params}`);
+
+        if (!response.ok) {
+          throw new Error('데이터를 불러오는 데 실패했습니다.');
+        }
+
+        const coefficients: any[] = await response.json();
+
+        // 정적 지역 데이터(좌표 포함)와 API 계수 데이터 병합
+        const mergedData = regionData.map(region => {
+          // regionCode를 기준으로 매칭 (문자열/숫자 형변환 주의)
+          const coeffData = coefficients.find(c => String(c.regionCode) === String(region.regionCode));
+
+          return {
+            ...region,
+            // API 데이터가 있으면 사용, 없으면 0 (지도 표시 안 함/회색)
+            coefficient: coeffData?.coefficient || 0,
+            tValue: coeffData?.tvalue || 1,
+            localR2: coeffData?.localR2 || 0
+          };
+        });
+
+        setMapData(mergedData);
+
+      } catch (error) {
+        console.error("지도 데이터 로딩 오류:", error);
+        alert("지도 데이터를 불러오는 중 오류가 발생했습니다.");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchCoefficients();
+  }, [selectedVariable, selectedDependent]); // 변수 변경 시 재실행
+
+  // 색상 결정 함수 (계수 값에 따라 파랑<->빨강 그라데이션)
+  const getColor = (val: number) => {
+    if (val > 0.5) return '#b2182b'; // 진한 빨강
+    if (val > 0.1) return '#d6604d'; // 빨강
+    if (val > 0.02) return '#f4a582'; // 연한 빨강
+    if (val > -0.02) return '#999999'; // 회색 (영향 없음)
+    if (val > -0.1) return '#92c5de'; // 연한 파랑
+    if (val > -0.5) return '#4393c3'; // 파랑
+    return '#2166ac'; // 진한 파랑
   };
 
+  // 영향력 라벨
   const getIntensityLabel = (coefficient: number) => {
     const absCoeff = Math.abs(coefficient);
-    if (absCoeff >= 0.04) return '매우 높음';
-    if (absCoeff >= 0.03) return '높음';
+    if (absCoeff >= 0.5) return '매우 강함';
+    if (absCoeff >= 0.1) return '강함';
     if (absCoeff >= 0.02) return '보통';
-    if (absCoeff >= 0.01) return '낮음';
-    return '매우 낮음';
+    return '약함/없음';
   };
 
   return (
-    <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">지역별 영향력 지도</h1>
-          <p className="text-lg text-gray-600">
-            선택한 변수가 건강 지표에 미치는 영향력을 지역별로 시각화합니다.
-          </p>
-        </div>
-
-        {/* Controls */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-8">
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                독립 변수 (물리적 요인)
-              </label>
-              <select
-                value={selectedVariable}
-                onChange={(e) => setSelectedVariable(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {physicalFactors.map((factor) => (
-                  <option key={factor.id} value={factor.name}>
-                    {factor.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                종속 변수 (건강 지표)
-              </label>
-              <select
-                value={selectedDependent}
-                onChange={(e) => setSelectedDependent(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                {dependentVariables.map((variable) => (
-                  <option key={variable.id} value={variable.id}>
-                    {variable.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Map Visualization */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
-                  {selectedVariable} → {dependentVariables.find(v => v.id === selectedDependent)?.name} 영향력 지도
-                </h2>
-              </div>
-
-              {/* 지도 영역 (Google Maps 임베드) */}
-              <div className="relative">
-                <iframe
-                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3164.289!2d126.9780!3d37.5665!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMzfCsDMzJzU5LjQiTiAxMjbCsDU4JzQwLjgiRQ!5e0!3m2!1sko!2skr!4v1234567890"
-                  width="100%"
-                  height="400"
-                  style={{ border: 0 }}
-                  allowFullScreen
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  className="rounded-lg"
-                ></iframe>
-                
-                {/* 지도 오버레이 - 지역별 데이터 포인트 */}
-                <div className="absolute inset-0 pointer-events-none">
-                  {mapData.map((region, index) => (
-                    <div
-                      key={region.regionCode}
-                      className="absolute transform -translate-x-1/2 -translate-y-1/2 pointer-events-auto cursor-pointer"
-                      style={{
-                        left: `${20 + (index % 3) * 30}%`,
-                        top: `${30 + Math.floor(index / 3) * 25}%`
-                      }}
-                      title={`${region.regionName}: β=${region.coefficient.toFixed(4)}`}
-                    >
-                      <div className={`w-6 h-6 rounded-full ${getColorIntensity(region.coefficient)} opacity-80 hover:opacity-100 transition-opacity`}></div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 범례 */}
-              <div className="mt-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">영향력 범례</h3>
-                <div className="flex items-center space-x-4 text-xs">
-                  <div className="flex items-center space-x-1">
-                    <div className="w-4 h-4 bg-blue-600 rounded"></div>
-                    <span>강한 음의 영향</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-4 h-4 bg-blue-300 rounded"></div>
-                    <span>약한 음의 영향</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-4 h-4 bg-gray-200 rounded"></div>
-                    <span>영향 없음</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-4 h-4 bg-red-300 rounded"></div>
-                    <span>약한 양의 영향</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <div className="w-4 h-4 bg-red-600 rounded"></div>
-                    <span>강한 양의 영향</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Region Details */}
-          <div className="space-y-6">
-            {/* 통계 요약 */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">통계 요약</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">분석 지역 수:</span>
-                  <span className="font-medium">{mapData.length}개</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">평균 계수:</span>
-                  <span className="font-medium">
-                    {(mapData.reduce((sum, d) => sum + d.coefficient, 0) / mapData.length).toFixed(4)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">최대 영향 지역:</span>
-                  <span className="font-medium text-sm">
-                    {mapData.reduce((max, d) => Math.abs(d.coefficient) > Math.abs(max.coefficient) ? d : max, mapData[0])?.regionName?.split(' ').pop()}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* 지역별 상세 정보 */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">지역별 상세 정보</h3>
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {mapData
-                  .sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient))
-                  .map((region) => (
-                    <div
-                      key={region.regionCode}
-                      className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 cursor-pointer transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-medium text-gray-900 text-sm">
-                          {region.regionName.split(' ').slice(-1)[0]}
-                        </h4>
-                        <div className={`w-3 h-3 rounded-full ${getColorIntensity(region.coefficient)}`}></div>
-                      </div>
-                      <div className="text-xs text-gray-600 space-y-1">
-                        <div className="flex justify-between">
-                          <span>GWR 계수:</span>
-                          <span className="font-medium">{region.coefficient.toFixed(4)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>p-value:</span>
-                          <span className="font-medium">{region.pValue.toFixed(3)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>영향력:</span>
-                          <span className="font-medium">{getIntensityLabel(region.coefficient)}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>현재 {dependentVariables.find(v => v.id === selectedDependent)?.name}:</span>
-                          <span className="font-medium">
-                            {selectedDependent === 'obesity' ? region.obesityRate : region.depressionRate}%
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* 해석 가이드 */}
-        <div className="mt-12 bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">지도 해석 가이드</h2>
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-2">양의 계수 (빨간색)</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                해당 변수가 증가할 때 건강 지표(비만율/우울감)도 함께 증가하는 지역입니다. 
-                예를 들어, 주점업 수가 증가하면 비만율이 높아지는 경향을 보입니다.
-              </p>
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900 mb-2">음의 계수 (파란색)</h3>
-              <p className="text-sm text-gray-600 mb-4">
-                해당 변수가 증가할 때 건강 지표가 감소하는 지역입니다. 
-                예를 들어, 체육시설 수가 증가하면 비만율이 낮아지는 경향을 보입니다.
-              </p>
-            </div>
-          </div>
-          <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>주의사항:</strong> p-value가 0.05보다 큰 경우 통계적으로 유의하지 않을 수 있으므로 
-              해석 시 신중하게 고려해야 합니다. Local R²가 높을수록 해당 지역에서의 모델 설명력이 우수합니다.
+      <Layout>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">지역별 영향력 지도</h1>
+            <p className="text-lg text-gray-600">
+              선택한 변수가 건강 지표에 미치는 영향력을 지도에 시각화합니다.
+              (<span className="text-red-600 font-bold">빨강</span>: 증가 요인, <span className="text-blue-600 font-bold">파랑</span>: 감소 요인)
             </p>
           </div>
+
+          {/* 컨트롤 패널 */}
+          <div className="bg-white rounded-lg shadow-lg p-6 mb-8 z-10 relative border border-gray-200">
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  독립 변수 (원인)
+                </label>
+                <select
+                    value={selectedVariable}
+                    onChange={(e) => setSelectedVariable(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {physicalFactors.map((factor) => (
+                      <option key={factor.id} value={factor.name}>{factor.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  종속 변수 (결과)
+                </label>
+                <select
+                    value={selectedDependent}
+                    onChange={(e) => setSelectedDependent(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {dependentVariables.map((variable) => (
+                      <option key={variable.id} value={variable.id}>{variable.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* 지도 영역 */}
+            <div className="lg:col-span-2 bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200 h-[600px] relative z-0">
+              {/* 로딩 오버레이 */}
+              {isLoading && (
+                  <div className="absolute inset-0 z-[1000] bg-white/80 flex flex-col items-center justify-center">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                    <p className="text-blue-600 font-medium">데이터를 불러오는 중...</p>
+                  </div>
+              )}
+
+              <MapContainer
+                  center={[36.5, 127.8]}
+                  zoom={7}
+                  style={{ height: '100%', width: '100%' }}
+                  scrollWheelZoom={true}
+              >
+                <ChangeView center={[36.5, 127.8]} zoom={7} />
+
+                <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+
+                {/* 데이터 마커 렌더링 */}
+                {mapData.map((region) => (
+                    region.coordinates && region.coordinates.length === 2 && (
+                        <CircleMarker
+                            key={region.regionCode}
+                            center={[region.coordinates[0], region.coordinates[1]]}
+                            pathOptions={{
+                              fillColor: getColor(region.coefficient),
+                              color: 'white',
+                              weight: 1,
+                              opacity: 1,
+                              fillOpacity: 0.8
+                            }}
+                            radius={8}
+                        >
+                          <Tooltip sticky>
+                            <div className="text-sm p-1">
+                              <p className="font-bold mb-1 text-gray-900">{region.regionName}</p>
+                              <div className="space-y-1 text-gray-700">
+                                <p>
+                                  <span className="font-semibold">GWR 계수(β):</span>{' '}
+                                  <span className={region.coefficient > 0 ? 'text-red-600' : 'text-blue-600'}>
+                              {region.coefficient.toFixed(4)}
+                            </span>
+                                </p>
+                                <p><span className="font-semibold">영향력:</span>
+                                  {getIntensityLabel(region.coefficient)}</p>
+                                <p><span className="font-semibold">t-value:</span> {region.tValue?.toFixed(3)}</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  (절댓값 2.7 이상일 때 유의미)
+                                </p>
+                              </div>
+                            </div>
+                          </Tooltip>
+                        </CircleMarker>
+                    )
+                ))}
+              </MapContainer>
+
+              {/* 범례 */}
+              <div className="absolute bottom-6 right-6 bg-white/95 p-4 rounded-lg shadow-md z-[500] text-xs pointer-events-none border border-gray-200">
+                <h4 className="font-bold mb-3 text-gray-700 border-b pb-1">영향력 범례 (GWR 계수)</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#b2182b]"></span> <span>양의 영향 (강함)</span></div>
+                  <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#f4a582]"></span> <span>양의 영향 (약함)</span></div>
+                  <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#999999] border border-gray-300"></span> <span>영향 없음 / 미미함</span></div>
+                  <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#92c5de]"></span> <span>음의 영향 (약함)</span></div>
+                  <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-[#2166ac]"></span> <span>음의 영향 (강함)</span></div>
+                </div>
+              </div>
+            </div>
+
+            {/* 상세 정보 사이드바 */}
+            <div className="space-y-6 h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">분석 요약</h3>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between border-b border-gray-100 pb-2">
+                    <span className="text-gray-600">분석 지역 수</span>
+                    <span className="font-bold text-gray-900">{mapData.length}개</span>
+                  </div>
+                  <div className="flex justify-between border-b border-gray-100 pb-2">
+                    <span className="text-gray-600">평균 계수</span>
+                    <span className="font-bold text-gray-900">
+                    {mapData.length > 0
+                        ? (mapData.reduce((sum, d) => sum + d.coefficient, 0) / mapData.length).toFixed(4)
+                        : '-'}
+                  </span>
+                  </div>
+                  <div className="p-3 bg-blue-50 rounded-md text-blue-800 mt-4 text-xs leading-relaxed">
+                    <strong>💡 해석 가이드:</strong><br/>
+                    <span className="text-red-600 font-bold">빨간색</span> 지역은 <strong>{selectedVariable}</strong>가 많을수록
+                    <strong>{selectedDependent === 'obesity' ? ' 비만율' : ' 우울감'}</strong>이 <ins>높아지는</ins> 경향이 있습니다.<br/>
+                    <span className="text-blue-600 font-bold">파란색</span> 지역은 반대로 <ins>낮아지는</ins> 경향이 있습니다.
+                  </div>
+                </div>
+              </div>
+
+              {/* 지역별 리스트 */}
+              <div className="bg-white rounded-lg shadow-lg p-6 border border-gray-200">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">지역별 상세 데이터 <span className="text-xs font-normal text-gray-500">(영향력 순)</span></h3>
+                <div className="space-y-0 divide-y divide-gray-100">
+                  {mapData
+                      .sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient))
+                      .slice(0, 50)
+                      .map((region) => (
+                          <div key={region.regionCode} className="flex items-center justify-between py-3 hover:bg-gray-50 px-2 rounded transition-colors">
+                            <div>
+                              <div className="font-medium text-gray-900 text-sm">
+                                {region.regionName.split(' ')[1] || region.regionName}
+                                <span className="text-xs text-gray-400 ml-1">({region.regionName.split(' ')[0]})</span>
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                t-value: <span className={Math.abs(region.tValue) >= 2.7 ? "text-green-600 font-bold" : "text-gray-400"}>
+                            {region.tValue?.toFixed(2)}
+                          </span>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className={`font-bold text-sm ${region.coefficient > 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                                {region.coefficient > 0 ? '+' : ''}{region.coefficient.toFixed(3)}
+                              </div>
+                              <div className="text-[10px] text-gray-400">계수(β)</div>
+                            </div>
+                          </div>
+                      ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </Layout>
+      </Layout>
   );
 };
 
