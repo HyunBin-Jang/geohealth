@@ -1,51 +1,86 @@
 import { useState } from 'react';
 import Layout from '../../components/layout/Layout';
-import { regionData, gwrCoefficients, physicalFactors, dependentVariables } from '../../mocks/gwrData';
+import { regionData, physicalFactors, dependentVariables } from '../../mocks/gwrData.ts';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const PolicySimulator = () => {
   const [selectedRegion, setSelectedRegion] = useState('');
   const [selectedDependent, setSelectedDependent] = useState('obesity');
   const [selectedIndependent, setSelectedIndependent] = useState('');
   const [changeAmount, setChangeAmount] = useState('');
   const [results, setResults] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSimulation = () => {
+  const handleSimulation = async () => {
     if (!selectedRegion || !selectedIndependent || !changeAmount) {
       alert('모든 필드를 입력해주세요.');
       return;
     }
 
-    const region = regionData.find(r => r.regionCode === selectedRegion);
-    const coefficient = gwrCoefficients.find(
-      c => c.regionCode === selectedRegion && 
-           c.variable === selectedIndependent && 
-           c.dependentVar === selectedDependent
-    );
+    setIsLoading(true); // 💡 로딩 시작
+    setResults(null); // 이전 결과 초기화
 
-    if (!region || !coefficient) {
-      alert('해당 지역의 계수 데이터를 찾을 수 없습니다.');
-      return;
+    try {
+      // 💡 2. 정적 regionData에서 시뮬레이션에 필요한 기본 정보 찾기
+      const region = regionData.find(r => r.regionCode === selectedRegion);
+      if (!region) {
+        throw new Error('선택된 지역 정보를 regionData에서 찾을 수 없습니다.');
+      }
+
+      // 💡 3. API 호출: 백엔드에서 해당 지역의 모든 GWR 계수 가져오기
+      const response = await fetch(`${API_BASE_URL}/api/gwr/coefficients/${selectedRegion}`);
+
+      if (!response.ok) {
+        throw new Error('서버에서 계수 정보를 가져오는 데 실패했습니다.');
+      }
+
+      const coefficients: any[] = await response.json(); // DTO 배열
+
+      // 💡 4. API 결과에서 시뮬레이션에 필요한 특정 계수 찾기
+      const coefficientData = coefficients.find(
+          c => c.variable === selectedIndependent &&
+              c.dependentVar === selectedDependent
+      );
+
+      if (!coefficientData) {
+        throw new Error('해당 조건의 GWR 계수를 찾을 수 없습니다.');
+      }
+
+      // 5. 시뮬레이션 계산
+      const deltaX = parseFloat(changeAmount);
+      const deltaY = deltaX * coefficientData.coefficient;
+
+      // '현재 값'은 정적 regionData에서 가져옴
+      const currentValue = selectedDependent === 'obesity'
+          ? region.obesityRate
+          : region.depressionRate;
+
+      const predictedValue = currentValue + deltaY;
+
+      // '인구수'도 정적 regionData에서 가져옴
+      const affectedPopulation = Math.round((Math.abs(deltaY) / 100) * region.population);
+
+      // 6. 결과 상태 업데이트
+      setResults({
+        region: region.regionName,
+        currentValue,
+        deltaY,
+        predictedValue,
+        coefficient: coefficientData.coefficient,
+        tValue: coefficientData.tvalue,
+        localR2: coefficientData.localR2,
+        affectedPopulation,
+        changeAmount: deltaX,
+        variable: selectedIndependent,
+        dependentVar: dependentVariables.find(v => v.id === selectedDependent)?.name
+      });
+
+    } catch (error) {
+      console.error("시뮬레이션 오류:", error);
+      alert(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.');
+    } finally {
+      setIsLoading(false); // 💡 로딩 종료
     }
-
-    const deltaX = parseFloat(changeAmount);
-    const deltaY = deltaX * coefficient.coefficient;
-    const currentValue = selectedDependent === 'obesity' ? region.obesityRate : region.depressionRate;
-    const predictedValue = currentValue + deltaY;
-    const affectedPopulation = Math.round((Math.abs(deltaY) / 100) * region.population);
-
-    setResults({
-      region: region.regionName,
-      currentValue,
-      deltaY,
-      predictedValue,
-      coefficient: coefficient.coefficient,
-      pValue: coefficient.pValue,
-      localR2: coefficient.localR2,
-      affectedPopulation,
-      changeAmount: deltaX,
-      variable: selectedIndependent,
-      dependentVar: selectedDependent === 'obesity' ? '비만율' : '우울감 경험률'
-    });
   };
 
   const downloadData = () => {
@@ -60,7 +95,7 @@ const PolicySimulator = () => {
       ['예측값', `${results.predictedValue.toFixed(2)}%`],
       ['변화량(ΔY)', `${results.deltaY.toFixed(3)}%`],
       ['GWR 계수(β)', results.coefficient],
-      ['p-value', results.pValue],
+      ['t-value', results.tValue],
       ['Local R²', results.localR2],
       ['영향받는 인구', `${results.affectedPopulation}명`]
     ];
@@ -88,7 +123,7 @@ const PolicySimulator = () => {
           {/* Input Form */}
           <div className="bg-white rounded-lg shadow-lg p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-6">정책 목표 입력</h2>
-            
+
             <div className="space-y-6">
               {/* 지역 선택 */}
               <div>
@@ -242,9 +277,9 @@ const PolicySimulator = () => {
                     </div>
                     <div>
                       <div className="text-lg font-bold text-gray-900">
-                        {results.pValue.toFixed(3)}
+                        {results.tValue.toFixed(3)}
                       </div>
-                      <div className="text-xs text-gray-600">p-value</div>
+                      <div className="text-xs text-gray-600">t-value</div>
                     </div>
                     <div>
                       <div className="text-lg font-bold text-gray-900">
@@ -259,8 +294,8 @@ const PolicySimulator = () => {
                 <div className="bg-purple-50 rounded-lg p-4">
                   <h3 className="font-semibold text-purple-900 mb-2">정책 효과 직관화</h3>
                   <p className="text-purple-800">
-                    <strong>{results.variable}</strong> 정책 시행 시 
-                    <strong className="text-purple-600"> 주민 약 {results.affectedPopulation.toLocaleString()}명</strong>의 
+                    <strong>{results.variable}</strong> 정책 시행 시
+                    <strong className="text-purple-600"> 주민 약 {results.affectedPopulation.toLocaleString()}명</strong>의
                     {results.dependentVar}에 영향을 미칠 것으로 예상됩니다.
                   </p>
                 </div>
@@ -296,7 +331,7 @@ const PolicySimulator = () => {
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">과학적 근거</h3>
               <p className="text-sm text-gray-600">
-                통계적 유의성(p-value)과 설명력(R²)을 함께 제시하여 예측의 신뢰성을 보장합니다.
+                통계적 유의성(t-value)과 설명력(R²)을 함께 제시하여 예측의 신뢰성을 보장합니다.
               </p>
             </div>
             <div className="text-center">
