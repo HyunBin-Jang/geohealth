@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Layout from '../../components/layout/Layout';
-import { regionData, gwrCoefficients } from '../../mocks/gwrData';
+import { regionData, gwrCoefficients } from '../../mocks/gwrData.ts';
 
 const HealthDashboard = () => {
   const [searchAddress, setSearchAddress] = useState('');
@@ -8,35 +8,58 @@ const HealthDashboard = () => {
   const [recommendations, setRecommendations] = useState<any[]>([]);
 
   const searchRegion = () => {
-    if (!searchAddress.trim()) {
+    const searchTerm = searchAddress.trim();
+    if (!searchTerm) {
       alert('주소를 입력해주세요.');
       return;
     }
 
-    // 간단한 주소 매칭 (실제로는 더 정교한 지오코딩 필요)
-    const region = regionData.find(r => 
-      r.regionName.includes(searchAddress) || 
-      searchAddress.includes(r.regionName.split(' ').pop() || '')
-    );
+    // 검색어 정규화 (예: "서울 종로" -> "서울종로")
+    const normalizedSearchTerm = searchTerm.replace(/\s/g, '');
+
+    // 1. Priority 1: 시군구명(예: "종로구")과 정확히 일치하는지 확인
+    let region = regionData.find(r => {
+      const regionParts = r.regionName.split(' ');
+      // "서울특별시 종로구" -> "종로구", "세종특별자치시 세종시" -> "세종시"
+      const sigungu = regionParts.length > 1 ? regionParts[1] : regionParts[0];
+      return sigungu === searchTerm;
+    });
+
+    // 2. Priority 2: 1번에서 못 찾으면, 시군구 명이 검색어를 포함하는지 확인 (예: "종로")
+    if (!region) {
+      region = regionData.find(r => {
+        const regionParts = r.regionName.split(' ');
+        const sigungu = regionParts.length > 1 ? regionParts[1] : regionParts[0];
+        return sigungu.includes(searchTerm);
+      });
+    }
+
+    // 3. Priority 3: 2번에서 못 찾으면, 띄어쓰기 없는 전체 이름에 검색어가 포함되는지 확인 (예: "서울종로")
+    if (!region) {
+      region = regionData.find(r =>
+          r.regionName.replace(/\s/g, '').includes(normalizedSearchTerm)
+      );
+    }
 
     if (!region) {
-      alert('해당 지역을 찾을 수 없습니다. 다른 주소로 시도해보세요.');
+      alert('해당 지역을 찾을 수 없습니다. 시군구 명으로 다시 시도해보세요. (예: 종로구)');
       return;
     }
 
     setSelectedRegion(region);
 
-    // 해당 지역의 GWR 계수 중 절댓값이 큰 순으로 추천
+    // 해당 지역의 GWR 계수 중 절댓값이 큰 순으로 추천 (gwrData.ts 사용)
     const regionCoeffs = gwrCoefficients.filter(c => c.regionCode === region.regionCode);
+
     const sortedRecommendations = regionCoeffs
-      .sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient))
-      .slice(0, 3)
-      .map(coeff => ({
-        ...coeff,
-        impact: Math.abs(coeff.coefficient),
-        direction: coeff.coefficient > 0 ? 'increase' : 'decrease',
-        recommendation: generateRecommendation(coeff.variable, coeff.coefficient, coeff.dependentVar)
-      }));
+        .sort((a, b) => Math.abs(b.coefficient) - Math.abs(a.coefficient))
+        .slice(0, 3) // 상위 3개 추출
+        .map(coeff => ({
+          ...coeff,
+          impact: Math.abs(coeff.coefficient),
+          direction: coeff.coefficient > 0 ? 'increase' : 'decrease',
+          recommendation: generateRecommendation(coeff.variable, coeff.coefficient, coeff.dependentVar)
+        }));
 
     setRecommendations(sortedRecommendations);
   };
@@ -45,7 +68,7 @@ const HealthDashboard = () => {
     const isObesity = dependentVar === 'obesity';
     const healthIndicator = isObesity ? '비만' : '우울감';
     const direction = coefficient > 0 ? '증가' : '감소';
-    
+
     const recommendations: { [key: string]: string } = {
       '주점업 수': coefficient > 0 
         ? `주점업 밀도가 높아 ${healthIndicator} 위험이 증가합니다. 건강한 식음료 업소 확대를 권장합니다.`
@@ -66,8 +89,8 @@ const HealthDashboard = () => {
 
   const getGrade = (value: number, type: 'obesity' | 'depression') => {
     const thresholds = type === 'obesity' 
-      ? { A: 20, B: 23, C: 26, D: 30 }
-      : { A: 4, B: 5.5, C: 7, D: 9 };
+      ? { A: 27, B: 30, C: 34, D: 37 }
+      : { A: 4.5, B: 6, C: 7.5, D: 8.5 };
 
     if (value <= thresholds.A) return { grade: 'A', color: 'text-green-600', bg: 'bg-green-50' };
     if (value <= thresholds.B) return { grade: 'B', color: 'text-blue-600', bg: 'bg-blue-50' };
@@ -142,7 +165,7 @@ const HealthDashboard = () => {
                     </span>
                   </div>
                   <div className="mt-2 text-sm text-gray-500">
-                    전국 평균: 24.2%
+                    전국 평균: 32.5%
                   </div>
                 </div>
 
@@ -160,7 +183,7 @@ const HealthDashboard = () => {
                     </span>
                   </div>
                   <div className="mt-2 text-sm text-gray-500">
-                    전국 평균: 5.7%
+                    전국 평균: 6.6%
                   </div>
                 </div>
               </div>
@@ -232,23 +255,23 @@ const HealthDashboard = () => {
                   <div className="relative">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
                       <span>우수</span>
-                      <span>전국 평균 (24.2%)</span>
+                      <span>전국 평균 (32.5%)</span>
                       <span>개선 필요</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
                       <div 
                         className={`h-3 rounded-full ${
-                          selectedRegion.obesityRate <= 24.2 ? 'bg-green-500' : 'bg-red-500'
+                          selectedRegion.obesityRate <= 32.5 ? 'bg-green-500' : 'bg-red-500'
                         }`}
                         style={{ width: `${Math.min((selectedRegion.obesityRate / 35) * 100, 100)}%` }}
                       ></div>
                     </div>
                     <div className="text-center mt-2">
                       <span className={`text-sm font-medium ${
-                        selectedRegion.obesityRate <= 24.2 ? 'text-green-600' : 'text-red-600'
+                        selectedRegion.obesityRate <= 32.5 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        전국 평균보다 {Math.abs(selectedRegion.obesityRate - 24.2).toFixed(1)}%p{' '}
-                        {selectedRegion.obesityRate <= 24.2 ? '낮음' : '높음'}
+                        전국 평균보다 {Math.abs(selectedRegion.obesityRate - 32.5).toFixed(1)}%p{' '}
+                        {selectedRegion.obesityRate <= 32.5 ? '낮음' : '높음'}
                       </span>
                     </div>
                   </div>
@@ -259,23 +282,23 @@ const HealthDashboard = () => {
                   <div className="relative">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
                       <span>우수</span>
-                      <span>전국 평균 (5.7%)</span>
+                      <span>전국 평균 (6.6%)</span>
                       <span>개선 필요</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-3">
                       <div 
                         className={`h-3 rounded-full ${
-                          selectedRegion.depressionRate <= 5.7 ? 'bg-green-500' : 'bg-red-500'
+                          selectedRegion.depressionRate <= 6.6 ? 'bg-green-500' : 'bg-red-500'
                         }`}
                         style={{ width: `${Math.min((selectedRegion.depressionRate / 10) * 100, 100)}%` }}
                       ></div>
                     </div>
                     <div className="text-center mt-2">
                       <span className={`text-sm font-medium ${
-                        selectedRegion.depressionRate <= 5.7 ? 'text-green-600' : 'text-red-600'
+                        selectedRegion.depressionRate <= 6.6 ? 'text-green-600' : 'text-red-600'
                       }`}>
-                        전국 평균보다 {Math.abs(selectedRegion.depressionRate - 5.7).toFixed(1)}%p{' '}
-                        {selectedRegion.depressionRate <= 5.7 ? '낮음' : '높음'}
+                        전국 평균보다 {Math.abs(selectedRegion.depressionRate - 6.6).toFixed(1)}%p{' '}
+                        {selectedRegion.depressionRate <= 6.6 ? '낮음' : '높음'}
                       </span>
                     </div>
                   </div>
