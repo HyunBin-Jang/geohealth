@@ -27,9 +27,7 @@
 # ✨ 주요 기능
 | **기능** | **상세 설명** | **기술적 구현 (Frontend / Backend)** |
 | --- | --- | --- |
-| **1. 지역별 영향력 지도** | - GWR 분석 결과를 지도에 시각화
-선택한 독립/종속 변수에 따른 영향력(계수)을 색상(빨강/파랑)과 강도로 표현
-- 마우스 오버 시 T-value 등 신뢰성 지표 확인 | **Frontend (`region-map/page.tsx`):**
+| **1. 지역별 영향력 지도** | - GWR 분석 결과를 지도에 시각화 -선택한 독립/종속 변수에 따른 영향력(계수)을 색상(빨강/파랑)과 강도로 표현 - 마우스 오버 시 T-value 등 신뢰성 지표 확인 | **Frontend (`region-map/page.tsx`):**
 - `react-leaflet`, `OpenStreetMap` 사용
 - 정적 좌표 데이터(`gwrData.ts`)와 동적 계수 데이터(API) 병합
 - `CircleMarker`로 시각화
