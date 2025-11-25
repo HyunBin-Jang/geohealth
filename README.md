@@ -27,21 +27,10 @@
 # ✨ 주요 기능
 | **기능** | **상세 설명** | **기술적 구현 (Frontend / Backend)** |
 | --- | --- | --- |
-| **1. 지역별 영향력 지도** | - GWR 분석 결과를 지도에 시각화, 선택한 독립/종속 변수에 따른 영향력(계수)을 색상(빨강/파랑)과 강도로 표현, 마우스 오버 시 T-value 등 신뢰성 지표 확인 | **Frontend (`region-map/page.tsx`):**
-- `react-leaflet`, `OpenStreetMap` 사용
-- 정적 좌표 데이터(`gwrData.ts`)와 동적 계수 데이터(API) 병합
-- `CircleMarker`로 시각화
-**Backend:**
-- `GET /api/gwr/coefficients/all`
-- 전체 지역 계수 조회 API 제공 |
-| **2. 우리 동네 건강 진단** | - 거주 지역 검색 및 건강 상태 진단
-- 비만율/우울감 경험률 등급 평가 (A~F)
-- GWR 분석 기반 맞춤형 정책 제언 제공 | **Frontend (`health-dashboard/page.tsx`):**
-- 스마트 검색 알고리즘 (다중 키워드 매칭)
-- 제언 생성 로직 (계수 크기 및 부호 기반 템플릿 매칭)
-**Backend:**
-- `GET /api/gwr/coefficients/{regionCode}`
-- 특정 지역 상세 계수 조회 API 제공 |
+| **1. 지역별 영향력 지도** | - GWR 분석 결과를 지도에 시각화, 선택한 독립/종속 변수에 따른 영향력(계수)을 색상(빨강/파랑)과 강도로 표현, 마우스 오버 시 T-value 등 신뢰성 지표 확인 | **Frontend (`region-map/page.tsx`):** `react-leaflet`, `OpenStreetMap` 사용, 정적 좌표 데이터(`gwrData.ts`)와 동적 계수 데이터(API) 병합, `CircleMarker`로 시각화
+**Backend:** `GET /api/gwr/coefficients/all`, 전체 지역 계수 조회 API 제공 |
+| **2. 우리 동네 건강 진단** | - 거주 지역 검색 및 건강 상태 진단, 비만율/우울감 경험률 등급 평가 (A~F), GWR 분석 기반 맞춤형 정책 제언 제공 | **Frontend (`health-dashboard/page.tsx`):** 스마트 검색 알고리즘 (다중 키워드 매칭), 제언 생성 로직 (계수 크기 및 부호 기반 템플릿 매칭)
+**Backend:**, `GET /api/gwr/coefficients/{regionCode}`, 특정 지역 상세 계수 조회 API 제공 |
 | **3. 정책 시뮬레이터** | - 가상 정책 시나리오에 따른 건강 지표 변화 예측
 - 변화량($\Delta X$) 입력 시 예상 결과($\Delta Y$) 및 영향 인구수 계산 | **Frontend (`policy-simulator/page.tsx`):**
 - 하이브리드 데이터 처리 (정적 데이터 + 동적 API)
